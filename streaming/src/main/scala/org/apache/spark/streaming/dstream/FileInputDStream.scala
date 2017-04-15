@@ -78,7 +78,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     depth: Int = 1,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
-    conf: Option[Configuration] = None)
+    conf: Option[Configuration] = None,
+    folderFilter: Path => Boolean = FileInputDStream.defaultFilter)
     (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
   extends InputDStream[(K, V)](ssc_) {
 
@@ -141,6 +142,10 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   override def stop() { }
 
+  //var allNewFiles: Array[String] = Array[String]()
+
+  //override def allFileNames(): Array[String] = allNewFiles
+
   /**
    * Finds the files that were modified since the last time this method was called and makes
    * a union RDD out of them. Note that this maintains the list of files that were processed
@@ -153,6 +158,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
     // Find new files
     val newFiles = findNewFiles(validTime.milliseconds)
+    //allNewFiles = newFiles
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
     batchTimeToSelectedFiles += ((validTime, newFiles))
     recentlySelectedFiles ++= newFiles
@@ -208,11 +214,12 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
          val path = status.getPath
          if (status.isDir) {
            // Note: A user may set depth = Int.MaxValue to search all nested directories.
-           if (depth > path.depth() - rootDirectoryDepth) {
+           val currDepth = path.depth() - rootDirectoryDepth
+           if (depth > currDepth && folderFilter(path)) {
              if (lastFoundDirs.contains(path)) {
-               if (status.getModificationTime > modTimeIgnoreThreshold) {
+               //if (status.getModificationTime > modTimeIgnoreThreshold) {
                  fs.listStatus(path).foreach(searchFilesRecursively(_, files))
-               }
+               //}
              } else {
                lastFoundDirs += path
                fs.listStatus(path).foreach(searchFilesRecursively(_, files))
@@ -234,7 +241,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
              // If the mod time of directory is more than ignore time, no new files in this directory
              try {
                val status = fs.getFileStatus(path)
-               status != null && status.getModificationTime > modTimeIgnoreThreshold
+               val filterFolder = folderFilter(path)
+               if(!filterFolder) lastFoundDirs.remove(path)
+               status != null && filterFolder
              } catch {
                // If the directory don't find, remove the directory from `lastFoundDirs`
                case e: FileNotFoundException =>

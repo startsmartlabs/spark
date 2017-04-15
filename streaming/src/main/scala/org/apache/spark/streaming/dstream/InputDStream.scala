@@ -106,6 +106,8 @@ abstract class InputDStream[T: ClassTag] (ssc_ : StreamingContext)
     ssc.graph.batchDuration
   }
 
+  def allFileNames(): Array[String] = Array()
+
   /** Method called to start receiving data. Subclasses must implement this method. */
   def start()
 

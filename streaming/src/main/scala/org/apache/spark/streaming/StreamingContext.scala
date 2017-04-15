@@ -455,6 +455,18 @@ class StreamingContext private[streaming] (
     new FileInputDStream[K, V, F](this, directory, depth, filter, newFilesOnly)
   }
 
+  def fileStream[
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
+  ] (directory: String,
+     filter: Path => Boolean,
+     newFilesOnly: Boolean,
+     depth: Int,
+     folderFilter: Path => Boolean): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, depth, filter, newFilesOnly, None, folderFilter)
+  }
+
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
