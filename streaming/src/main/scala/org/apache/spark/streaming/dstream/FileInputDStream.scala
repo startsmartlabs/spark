@@ -18,6 +18,9 @@
 package org.apache.spark.streaming.dstream
 
 import java.io.{FileNotFoundException, IOException, ObjectInputStream}
+import java.text.SimpleDateFormat
+import java.util.regex.Pattern
+import java.util.{Calendar, Date}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -30,7 +33,6 @@ import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamInputInfo
 import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Utils}
-
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
  * files and creates a stream out of them. The way it works as follows.
@@ -78,8 +80,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     depth: Int = 1,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
-    conf: Option[Configuration] = None,
-    folderFilter: Path => Boolean = FileInputDStream.defaultFilter)
+    conf: Option[Configuration] = None)
     (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
   extends InputDStream[(K, V)](ssc_) {
 
@@ -208,6 +209,31 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
          def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
        }
        val rootDirectoryDepth = directoryDepth
+
+       def getFolderFilter(): Path => Boolean = {
+         val cal = Calendar.getInstance()
+         val dateFormat_ts: SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd/H")
+         dateFormat_ts.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+         val currHourDate = dateFormat_ts.format(cal.getTime).split("/")
+         cal.add(Calendar.HOUR_OF_DAY, -1)
+         val prevHourDate = dateFormat_ts.format(cal.getTime).split("/")
+         new FolderPathFilter(Array(currHourDate(0), prevHourDate(0)), Array(currHourDate(1), prevHourDate(1))).accept(_)
+       }
+
+       class FolderPathFilter(dates: Array[String], hours: Array[String]) extends org.apache.hadoop.fs.PathFilter with Serializable {
+         override def accept(path: org.apache.hadoop.fs.Path): Boolean = {
+           val name = path.getName
+           if (name.matches("^date=.*$")) {
+             name.matches("^date=" + dates.mkString("|") + "$")
+           } else if (name.matches("^hour=.*$")) {
+             path.toString.matches("^.*date=(" + dates.mkString("|") + ")/hour=(" + hours.mkString("|") + ")/?$")
+           } else {
+             false
+           }
+         }
+       }
+
+       val folderFilter = getFolderFilter()
 
        // Search nested directories to find new files.
        def searchFilesRecursively(status: FileStatus, files: mutable.ArrayBuffer[String]): Unit = {
@@ -429,6 +455,7 @@ private[streaming]
 object FileInputDStream {
 
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
+
 
   /**
    * Calculate the number of last batches to remember, such that all the files selected in
