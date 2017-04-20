@@ -224,7 +224,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
          override def accept(path: org.apache.hadoop.fs.Path): Boolean = {
            val name = path.getName
            if (name.matches("^date=.*$")) {
-             name.matches("^date=" + dates.mkString("|") + "$")
+             name.matches("^date=(" + dates.mkString("|") + ")$")
            } else if (name.matches("^hour=.*$")) {
              path.toString.matches("^.*date=(" + dates.mkString("|") + ")/hour=(" + hours.mkString("|") + ")/?$")
            } else {
