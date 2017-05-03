@@ -127,8 +127,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
 
-  @transient private var lastFoundDirs = new mutable.HashSet[Path]()
-
   // Read-through cache of file mod times, used to speed up mod time lookups
   @transient private var fileToModTime = new TimeStampedHashMap[String, Long](true)
 
@@ -242,42 +240,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
            // Note: A user may set depth = Int.MaxValue to search all nested directories.
            val currDepth = path.depth() - rootDirectoryDepth
            if (depth > currDepth && folderFilter(path)) {
-             if (lastFoundDirs.contains(path)) {
-               //if (status.getModificationTime > modTimeIgnoreThreshold) {
-                 fs.listStatus(path).foreach(searchFilesRecursively(_, files))
-               //}
-             } else {
-               lastFoundDirs += path
-               fs.listStatus(path).foreach(searchFilesRecursively(_, files))
-             }
+             logInfo("Accepted folder path - " + path.toString)
+             fs.listStatus(path).foreach(searchFilesRecursively(_, files))
            }
-         } else {
-           if (newFileFilter.accept(path)) {
-             files += path.toString
-           }
-         }
+         } else if (newFileFilter.accept(path)) files += path.toString
        }
 
-       val validDirs: Iterable[Path] =
-         if (lastFoundDirs.isEmpty) {
-           Seq(directoryPath)
-         }
-         else {
-           lastFoundDirs.filter { path =>
-             // If the mod time of directory is more than ignore time, no new files in this directory
-             try {
-               val status = fs.getFileStatus(path)
-               val filterFolder = folderFilter(path)
-               if(!filterFolder) lastFoundDirs.remove(path)
-               status != null && filterFolder
-             } catch {
-               // If the directory don't find, remove the directory from `lastFoundDirs`
-               case e: FileNotFoundException =>
-                 lastFoundDirs.remove(path)
-                 false
-             }
-           }
-         }
+       val validDirs: Iterable[Path] = Seq(directoryPath)
 
        val newFiles = mutable.ArrayBuffer[String]()
        validDirs.flatMap(fs.listStatus(_)). // Get sub dirs and files
@@ -412,7 +381,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()
     fileToModTime = new TimeStampedHashMap[String, Long](true)
-    lastFoundDirs = new mutable.HashSet[Path]()
   }
 
   /**
