@@ -225,6 +225,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
              name.matches("^date=(" + dates.mkString("|") + ")$")
            } else if (name.matches("^hour=.*$")) {
              path.toString.matches("^.*date=(" + dates.mkString("|") + ")/hour=(" + hours.mkString("|") + ")/?$")
+           } else if (name.matches("^runid=.*$")) {
+             name.matches("^runid=(" + dates.mkString("|") + ").*$")
            } else {
              false
            }
