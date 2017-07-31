@@ -226,7 +226,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
            } else if (name.matches("^hour=.*$")) {
              path.toString.matches("^.*date=(" + dates.mkString("|") + ")/hour=(" + hours.mkString("|") + ")/?$")
            } else if (name.matches("^runid=.*$")) {
-             name.matches("^runid=(" + dates.mkString("|") + ").*$")
+             // convert date from yyyy-MM-dd to yyyyMMdd
+             name.matches("^runid=(" + dates.mkString("|").replace("-", "") + ").*$")
            } else {
              false
            }
